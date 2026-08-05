@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Metallic Hell</title>
+    <link rel="shortcut icon" href="TemplateData/favicon.ico">
+    <link rel="stylesheet" href="TemplateData/style.css">
+    <!-- §3.13 web loader (design handoff): void page, two amber eyes whose
+         glow ramps with download %, thin bar, mono status line. Page bg
+         matches the canvas clear color so the engine handoff is invisible.
+         No external fonts — system stacks only (the page must be served
+         entirely from the chain). -->
+    <style>
+      html, body { background: #050403; margin: 0; height: 100%; }
+      #unity-container { background: #050403; }
+      #unity-canvas { background: #050403; }
+      /* Default Unity chrome is replaced by the custom loader. */
+      #unity-loading-bar { display: none !important; }
+      #unity-footer { background: transparent; }
+      #unity-build-title { display: none; }
+      #unity-logo-title-footer { display: none; }
+
+      #hell-loader {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #050403;
+        z-index: 10;
+        font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
+        user-select: none;
+      }
+      .hl-title {
+        font-family: "Arial Narrow", "Helvetica Neue Condensed", Impact, sans-serif;
+        font-size: 44px;
+        font-weight: 700;
+        letter-spacing: 10px;
+        color: #d8cdb8;
+        margin-bottom: 56px;
+      }
+      /* Two eyes: glow opacity is driven from JS (0.15 → 1.0 with progress),
+         a slow 4s breathing pulse rides on the wrapper. GPU-cheap. */
+      .hl-eyes {
+        display: flex;
+        gap: 90px;
+        margin-bottom: 72px;
+        animation: hl-breathe 4s ease-in-out infinite;
+      }
+      .hl-eye {
+        width: 120px;
+        height: 84px;
+        border-radius: 50%;
+        opacity: 0.15; /* JS ramps this with download % */
+        background: radial-gradient(ellipse at center,
+          #eec27a 0%, #d9a13b 28%, rgba(217,161,59,0.35) 58%, rgba(217,161,59,0) 75%);
+        filter: blur(2px);
+      }
+      @keyframes hl-breathe {
+        0%, 100% { transform: scale(1);     filter: brightness(0.92); }
+        50%      { transform: scale(1.04);  filter: brightness(1.05); }
+      }
+      .hl-bar {
+        width: 420px;
+        max-width: 70vw;
+        height: 3px;
+        background: #40392e;
+        margin-bottom: 18px;
+      }
+      .hl-bar-fill {
+        width: 0%;
+        height: 100%;
+        background: #d9a13b;
+      }
+      .hl-status {
+        font-size: 13px;
+        letter-spacing: 3px;
+        color: #6b6354;
+      }
+      .hl-credit {
+        position: absolute;
+        left: 24px;
+        bottom: 18px;
+        font-size: 11px;
+        letter-spacing: 3px;
+        color: #4a443a;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="unity-container" class="unity-desktop">
+      <canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas>
+      <div id="unity-warning"> </div>
+      <div id="unity-footer">
+        <div id="unity-fullscreen-button"></div>
+      </div>
+      <div id="hell-loader">
+        <div class="hl-title">METALLIC HELL</div>
+        <div class="hl-eyes">
+          <div class="hl-eye" id="hl-eye-l"></div>
+          <div class="hl-eye" id="hl-eye-r"></div>
+        </div>
+        <div class="hl-bar"><div class="hl-bar-fill" id="hl-bar-fill"></div></div>
+        <div class="hl-status" id="hl-status">CONNECTING…</div>
+        <div class="hl-credit">SERVED FROM THEBES L1</div>
+      </div>
+    </div>
+    <script>
+      var canvas = document.querySelector("#unity-canvas");
+
+      function unityShowBanner(msg, type) {
+        var warningBanner = document.querySelector("#unity-warning");
+        function updateBannerVisibility() {
+          warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
+        }
+        var div = document.createElement('div');
+        div.innerHTML = msg;
+        warningBanner.appendChild(div);
+        if (type == 'error') div.style = 'background: red; padding: 10px;';
+        else {
+          if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
+          setTimeout(function() {
+            warningBanner.removeChild(div);
+            updateBannerVisibility();
+          }, 5000);
+        }
+        updateBannerVisibility();
+      }
+
+      // ── Custom loader UI (§3.13) ───────────────────────────────────────
+      var hlEyeL = document.getElementById("hl-eye-l");
+      var hlEyeR = document.getElementById("hl-eye-r");
+      var hlFill = document.getElementById("hl-bar-fill");
+      var hlStatus = document.getElementById("hl-status");
+      // p in [0,1] across the WHOLE boot: download 0→0.9, engine 0.9→1.
+      function hlProgress(p, label) {
+        var glow = 0.15 + 0.85 * Math.min(p, 1);
+        hlEyeL.style.opacity = glow;
+        hlEyeR.style.opacity = glow;
+        hlFill.style.width = (100 * Math.min(p, 1)) + "%";
+        if (label) hlStatus.textContent = label;
+      }
+
+      // ─── On-chain part loader (fully manifest-driven) ─────────────────
+      // The Thebes boundary can only serve assets well under 10 MiB (wasm
+      // runtime reply cap) with a 5s upstream fetch window, so the big Unity
+      // files are stored on-chain as 2 MiB parts. Build/parts/manifest.json
+      // (written by make_parts.sh) names the loader/framework files and the
+      // split files, so this page never changes across rebuilds. We fetch
+      // the parts, reassemble Blobs, and hand blob: URLs to the loader —
+      // bytes are identical, so Unity's gzip decompression fallback works
+      // unchanged.
+      function fetchWithRetry(url, attempts) {
+        attempts = attempts || 5;
+        return new Promise(function (resolve, reject) {
+          var i = 0;
+          function tryOnce() {
+            fetch(url, { cache: "no-store" })
+              .then(function (r) {
+                if (!r.ok) throw new Error("HTTP " + r.status + " for " + url);
+                return r.arrayBuffer();
+              })
+              .then(resolve)
+              .catch(function (e) {
+                i++;
+                if (i >= attempts) return reject(e);
+                setTimeout(tryOnce, 700 * i); // boundary/cluster can flap briefly
+              });
+          }
+          tryOnce();
+        });
+      }
+
+      // Cache API layer: parts are immutable per manifest.version, so a
+      // revisit loads from the browser cache instead of re-downloading
+      // ~115 MB through the chain boundary. Fails open to plain fetch.
+      function fetchPart(url, version) {
+        var key = url + "?v=" + version;
+        if (!window.caches) return fetchWithRetry(url);
+        return caches.open("metallic-hell-parts").then(function (c) {
+          return c.match(key).then(function (hit) {
+            if (hit) return hit.arrayBuffer();
+            return fetchWithRetry(url).then(function (buf) {
+              return c.put(key, new Response(buf.slice(0)))
+                .catch(function () {})
+                .then(function () { return buf; });
+            });
+          });
+        }).catch(function () { return fetchWithRetry(url); });
+      }
+
+      // Bounded-concurrency ordered part fetch. Concurrency 4: each boundary
+      // fetch has an independent 5s upstream budget; a small pool keeps
+      // per-request throughput inside it while parallelizing WAN latency.
+      function fetchAllParts(entry, version, onBytes) {
+        var n = entry.parts;
+        var urls = [];
+        for (var i = 0; i < n; i++) {
+          urls.push("Build/parts/" + entry.file + "." + String(i).padStart(3, "0"));
+        }
+        var buffers = new Array(n);
+        var next = 0;
+        function worker() {
+          if (next >= n) return Promise.resolve();
+          var idx = next++;
+          return fetchPart(urls[idx], version).then(function (buf) {
+            buffers[idx] = buf;
+            onBytes(buf.byteLength);
+            return worker();
+          });
+        }
+        var pool = [];
+        for (var w = 0; w < Math.min(4, n); w++) pool.push(worker());
+        return Promise.all(pool).then(function () { return buffers; });
+      }
+
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        var meta = document.createElement('meta');
+        meta.name = 'viewport';
+        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
+        document.getElementsByTagName('head')[0].appendChild(meta);
+        document.querySelector("#unity-container").className = "unity-mobile";
+        canvas.className = "unity-mobile";
+      } else {
+        canvas.style.width = "960px";
+        canvas.style.height = "600px";
+      }
+
+      fetchWithRetry("Build/parts/manifest.json").then(function (mbuf) {
+        var manifest = JSON.parse(new TextDecoder().decode(mbuf));
+        var totalBytes = manifest.data.bytes + manifest.wasm.bytes;
+        var got = 0;
+        function onBytes(b) {
+          got += b;
+          // Part download drives progress 0→90%; Unity engine takes 90→100%.
+          hlProgress(0.9 * Math.min(got / totalBytes, 1),
+            "DOWNLOADING… " + Math.round(got / 1048576) + " / " + Math.round(totalBytes / 1048576) + " MB");
+        }
+        return Promise.all([
+          fetchAllParts(manifest.data, manifest.version, onBytes),
+          fetchAllParts(manifest.wasm, manifest.version, onBytes),
+        ]).then(function (res) {
+          hlProgress(0.9, "STARTING ENGINE…");
+          var config = {
+            arguments: [],
+            dataUrl: URL.createObjectURL(new Blob(res[0])),
+            frameworkUrl: manifest.framework,
+            codeUrl: URL.createObjectURL(new Blob(res[1])),
+            streamingAssetsUrl: "StreamingAssets",
+            companyName: "DefaultCompany",
+            productName: "Metallic Hell",
+            productVersion: "0.1.0",
+            showBanner: unityShowBanner,
+            // Sync Application.persistentDataPath (PlayerPrefs, high score,
+            // saved username) to IndexedDB on write — a browser tab never
+            // gets a clean Application.Quit, so without this everything
+            // saved is lost when the tab closes.
+            autoSyncPersistentDataPath: true,
+          };
+          var script = document.createElement("script");
+          script.src = manifest.loader;
+          script.onload = function () {
+            createUnityInstance(canvas, config, function (progress) {
+              hlProgress(0.9 + 0.1 * progress, "STARTING ENGINE…");
+            }).then(function (unityInstance) {
+              document.getElementById("hell-loader").style.display = "none";
+              document.querySelector("#unity-fullscreen-button").onclick = function () {
+                unityInstance.SetFullscreen(1);
+              };
+            }).catch(function (message) {
+              alert(message);
+            });
+          };
+          document.body.appendChild(script);
+        });
+      }).catch(function (e) {
+        hlStatus.textContent = "DOWNLOAD FAILED — RELOAD TO RETRY";
+        hlStatus.style.color = "#c05a4f";
+        unityShowBanner("Failed to download game data: " + e, "error");
+      });
+
+    </script>
+  </body>
+</html>

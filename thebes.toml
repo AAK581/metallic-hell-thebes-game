@@ -1,0 +1,21 @@
+[project]
+name = "metallic-hell"
+default_network = "wan-experimental"
+chain_id = 2026
+
+[networks.wan-experimental]
+validators = [
+    "http://187.127.85.101:18080",
+    "http://187.124.35.206:18080",
+    "http://187.77.182.211:18080",
+    "http://76.13.140.52:18080",
+]
+boundary = "https://memphis.mercaturaforum.com"
+routing = "smart"
+
+[canisters.web]
+type = "frontend"
+cid = 9635586163366
+wasm = "asset_canister.wasm"
+bundle = "dist"
+health_check_url = "/index.html"
