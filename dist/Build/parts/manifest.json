@@ -1,0 +1,16 @@
+{
+ "version": "bbb473c8a27a",
+ "partBytes": 2097152,
+ "loader": "Build/v_1.9.loader.js",
+ "framework": "Build/v_1.9.framework.js.unityweb",
+ "data": {
+  "file": "v_1.9.data.unityweb",
+  "bytes": 100261791,
+  "parts": 48
+ },
+ "wasm": {
+  "file": "v_1.9.wasm.unityweb",
+  "bytes": 18462161,
+  "parts": 9
+ }
+}
