@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # New Unity WebGL build → replace dist/ → commit → push, in one command:
 #
-#   bash push_build.sh /mnt/c/ClaudeCodeTest/Builds/Web/v_1.10
+#   bash push_build.sh /mnt/c/path/to/MetallicHell/Builds/Web/v_1.10
 #
 # The repo carries exactly one build (dist/ is replaced wholesale), so each
 # push swaps the uploaded build for the new one.

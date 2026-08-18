@@ -33,7 +33,7 @@ Unity: **File ▸ Build Settings ▸ WebGL** (Compression = Gzip, Decompression
 Fallback = ON, threading OFF) to `Builds/Web/v_X.Y`, then:
 
 ```bash
-bash push_build.sh /mnt/c/ClaudeCodeTest/Builds/Web/v_X.Y
+bash push_build.sh /mnt/c/path/to/MetallicHell/Builds/Web/v_X.Y
 ```
 
 That replaces `dist/`, commits, and pushes. Then deploy to the chain:

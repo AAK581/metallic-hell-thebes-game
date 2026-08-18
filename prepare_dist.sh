@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One command from a fresh Unity WebGL build to a deploy-ready dist/.
 #
-#   bash prepare_dist.sh /mnt/c/ClaudeCodeTest/Builds/Web/v_1.4 [PART_BYTES]
+#   bash prepare_dist.sh /mnt/c/path/to/MetallicHell/Builds/Web/v_1.4 [PART_BYTES]
 #
 # 1. Copies the Unity build output (Build/, TemplateData/, StreamingAssets/)
 #    into dist/, replacing what's there.
