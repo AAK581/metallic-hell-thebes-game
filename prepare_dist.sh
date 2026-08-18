@@ -22,7 +22,7 @@
 # runs at the end) traps with "all fuel consumed by WebAssembly" mid-upload.
 # A fresh cid grows 0→114 MB and never hits the wall. (Durable fix = cache
 # per-asset leaf hashes in the canister; see report to Mercatura.)
-#   BIN=/home/adham/thebes-deploy-build/tools/thebes-deploy/target/release/thebes-deploy
+#   BIN=$HOME/thebes-deploy-build/tools/thebes-deploy/target/release/thebes-deploy
 #   THEBES_DEPLOY_FILE_DEADLINE_SECS=1800 "$BIN" deploy
 #
 # Unity build settings must stay: Compression=Gzip, Decompression Fallback=ON,
